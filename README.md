@@ -1,21 +1,13 @@
-[CrashDetect plugin][github]
+[PAWN debugger plugin][github]
 ============================
 
 [![Version][version_badge]][version]
-[![Build Status][build_status]][build]
-[![Build Status - Windows][build_status_win]][build_win]
 
-This plugin helps you debug runtime errors and server crashes. When something
-goes wrong you see a more or less detailed error message that contains a
-description of the error and a stack trace.
+[Idea discussion, and why we built-in debug hooks are not good enough for our case](http://forum.sa-mp.com/showthread.php?t=647654)
 
-Installing
-----------
+This will be a debugger plugin for sa-mp servers, allowing for creation of better AMX runtime debugging tools. Currently it's just a hard fork of Zeex's [crashdetect plugin, as of commit `cdd586d60a55455018fa63f7c7b76cf952349f88`](https://github.com/Zeex/samp-plugin-crashdetect/commit/cdd586d60a55455018fa63f7c7b76cf952349f88). If all goes well, all that should remain of that plugin in this repository is code structure and coding conventions, build configurations, and virtual machine hijacker.
 
-1. Download a compiled plugin form the [Releases][download] page on Github or
-build it yourself from source code (see below).
-2. Extract/copy `crashdetect.so` or `crashdetect.dll` to `<sever>/plugins/`.
-3. Add `crashdetect` (Windows) or `crashdetect.so` (Linux) to the `plugins` line of your server.cfg.
+Be aware that at the same time this are my C++ learning grounds, so not everything will be always 100%. Issues are open - all comments are welcome.
 
 Building on Linux
 -----------------
@@ -38,10 +30,10 @@ If you're building on CentOS, install the following packages:
 yum install gcc gcc-c++ cmake28 make
 ```
 
-Now you're ready to build CrashDetect:
+Now you're ready to build the plugin:
 
 ```
-cd crashdetect
+cd Plugin
 mkdir build && cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 make
@@ -54,7 +46,7 @@ You'll need to install CMake and Visual Studio (Express edition will suffice).
 After that, either run cmake from the command line:
 
 ```
-cd crashdetect
+cd Plugin
 mkdir build && cd build
 path/to/cmake.exe ../ -DBUILD_TESTING=OFF
 ```
@@ -68,65 +60,14 @@ To build the project:
 path/to/cmake.exe --build . --config Release
 ```
 
-You can also build it from within Visual Studio: open build/crashdetect.sln and
+You can also build it from within Visual Studio: open build/Plugin.sln and
 go to menu -> Build -> Build Solution (or just press F7).
-
-Configuration
--------------
-
-CrashDetect reads settings from server.cfg, the server configuration file.
-Below is the list of available settings along with some examples.
-
-* `trace <flags>`
-
-  Enables function call tracing.
-
-  If enabled, CrashDetect will show information about every function call in
-  all running scripts, such as the name of the function being called and the
-  values of its parameters.
-
-  `flags` may be one or combination of the following:
-
-  * `n` - trace native functions
-  * `p` - trace public functions
-  * `f` - trace normal functions (i.e. all non-public functions)
-
-  For example, `trace pn` will trace both public and native calls, and
-  `trace pfn` will trace all functions.
-
-* `trace_filter <regexp>`
-
-  Filters `trace` output based on a regular expression.
-
-  Examples:
-
-  * `trace_filter Player`     - output functions whose name contains `Player`
-  * `trace_filter playerid=0` - show functions whose `playerid` parameter is 0
-
-* `crashdetect_log <filename>`
-  
-  Use a custom log file for output.
-
-  By default crashes and errors are printed to the server log. This options
-  allows you to set a different file for that.
-
-Debug info
-----------
-
-To get as much useful information as possible in crash and runtime error reports
-during debugging [compile your script(s) with debug info][debug-info].
 
 License
 -------
 
 Licensed under the 2-clause BSD license. See the LICENSE.txt file.
 
-[github]: https://github.com/Zeex/samp-plugin-crashdetect
-[version]: http://badge.fury.io/gh/Zeex%2Fsamp-plugin-crashdetect
-[version_badge]: https://badge.fury.io/gh/Zeex%2Fsamp-plugin-crashdetect.svg
-[build]: https://travis-ci.org/Zeex/samp-plugin-crashdetect
-[build_status]: https://travis-ci.org/Zeex/samp-plugin-crashdetect.svg?branch=master
-[build_win]: https://ci.appveyor.com/project/Zeex/samp-plugin-crashdetect/branch/master
-[build_status_win]: https://ci.appveyor.com/api/projects/status/nay4h3t5cu6469ic/branch/master?svg=true
-[download]: https://github.com/Zeex/samp-plugin-crashdetect/releases
-[debug-info]: https://github.com/Zeex/samp-plugin-crashdetect/wiki/Compiling-scripts-with-debug-info
+[github]: https://github.com/Pawn-Debugger/Plugin
+[version]: http://badge.fury.io/gh/Pawn-Debugger%2FPlugin
+[version_badge]: https://badge.fury.io/gh/Pawn-Debugger%2FPlugin.svg
