@@ -3,7 +3,7 @@
 
 [![Version][version_badge]][version]
 
-[Idea discussion, and why we built-in debug hooks are not good enough for our case](http://forum.sa-mp.com/showthread.php?t=647654)
+[Idea discussion, and why built-in debug hooks are not good enough for our case](http://forum.sa-mp.com/showthread.php?t=647654)
 
 This will be a debugger plugin for sa-mp servers, allowing for creation of better AMX runtime debugging tools. Currently it's just a hard fork of Zeex's [crashdetect plugin, as of commit `cdd586d60a55455018fa63f7c7b76cf952349f88`](https://github.com/Zeex/samp-plugin-crashdetect/commit/cdd586d60a55455018fa63f7c7b76cf952349f88). If all goes well, all that should remain of that plugin in this repository is code structure and coding conventions, build configurations, and virtual machine hijacker.
 
