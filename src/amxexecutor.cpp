@@ -1,4 +1,5 @@
-#include <cassert>
+#include <assert.h>
+
 #include <chrono>
 #include <thread>
 
@@ -24,35 +25,68 @@ namespace {
     #endif
   }
 #endif
+
+#if !defined assert_static
+  /* see "Compile-Time Assertions" by Ralf Holly,
+   * C/C++ Users Journal, November 2004
+   */
+  #define assert_static(e) \
+    do { \
+      enum { assert_static__ = 1/(e) }; \
+    } while (0)
+#endif
 }
 
 AMXExecutor::AMXExecutor(AMX *amx) : AMXService<AMXExecutor>(amx)
 {}
 
-const cell STKMARGIN = (cell) (16 * sizeof(cell));
+#if -8/3==-2 && 8/-3==-2
+  #define TRUNC_SDIV    /* signed divisions are truncated on this platform */
+#else
+  #define IABS(a)       ((a)>=0 ? (a) : (-a))
+#endif
+
+#if !defined _R
+  #define _R_DEFAULT            /* mark default memory access */
+  #define _R(base,addr)         (* (cell *)((unsigned char*)(base)+(int)(addr)))
+  #define _R8(base,addr)        (* (unsigned char *)((unsigned char*)(base)+(int)(addr)))
+  #define _R16(base,addr)       (* (uint16_t *)((unsigned char*)(base)+(int)(addr)))
+  #define _R32(base,addr)       (* (uint32_t *)((unsigned char*)(base)+(int)(addr)))
+#endif
+#if !defined _W
+  #define _W_DEFAULT            /* mark default memory access */
+  #define _W(base,addr,value)   ((*(cell *)((unsigned char*)(base)+(int)(addr)))=(cell)(value))
+  #define _W8(base,addr,value)  ((*(unsigned char *)((unsigned char*)(base)+(int)(addr)))=(unsigned char)(value))
+  #define _W16(base,addr,value) ((*(uint16_t *)((unsigned char*)(base)+(int)(addr)))=(uint16_t)(value))
+  #define _W32(base,addr,value) ((*(uint32_t *)((unsigned char*)(base)+(int)(addr)))=(uint32_t)(value))
+#endif
 
 #define NUMENTRIES(hdr,field,nextfield) \
                         (unsigned)(((hdr)->nextfield - (hdr)->field) / (hdr)->defsize)
 #define GETENTRY(hdr,table,index) \
                         (AMX_FUNCSTUB *)((unsigned char*)(hdr) + (unsigned)(hdr)->table + (unsigned)index*(hdr)->defsize)
-#define CHKSTACK()      if (stk>_amx->stp) ABORT(_amx, AMX_ERR_STACKLOW)
-#define CHKHEAP()       if (hea<_amx->hlw) ABORT(_amx, AMX_ERR_HEAPLOW)
-#define CHKMARGIN()     if (hea+STKMARGIN>stk) ABORT(_amx, AMX_ERR_STACKERR)
-        
-#define GETPARAM(v)     ( v=*(cell *)cip++ )
-#define SKIPPARAM(n)    ( cip=(cell *)cip+(n) )
-#define PUSH(v)         ( stk-=sizeof(cell), *(cell *)(data+(int)stk)=v )
-#define POP(v)          ( v=*(cell *)(data+(int)stk), stk+=sizeof(cell) )
-#define ABORT(amx,v)    { (amx)->pri = pri;\
-                          (amx)->stk = stk;\
-                          (amx)->hea = hea;\
-                          (amx)->frm = frm;\
-                          amx_RaiseExecError(amx, index, retval, v);\
-                          (amx)->stk=reset_stk;\
-                          (amx)->hea=reset_hea;\
-                          return v; }
 
-#if PAWN_CELL_SIZE==16
+#if !defined _RCODE
+  #define _RCODE()      ( *cip++ )
+#endif
+
+#if !defined GETPARAM
+  #define GETPARAM(v)   ( v=_RCODE() )   /* read a parameter from the opcode stream */
+#endif
+#define SKIPPARAM(n)    ( cip=(cell *)cip+(n) ) /* for obsolete opcodes */
+
+#define PUSH(v)         ( stk-=sizeof(cell), _W(data,stk,v) )
+#define POP(v)          ( v=_R(data,stk), stk+=sizeof(cell) )
+
+#define ABORT(amx,v)    { (amx)->stk=reset_stk; (amx)->hea=reset_hea; return v; }
+
+#define CHKMARGIN()     if (hea+STKMARGIN>stk) return AMX_ERR_STACKERR
+#define CHKSTACK()      if (stk>_amx->stp) return AMX_ERR_STACKLOW
+#define CHKHEAP()       if (hea<_amx->hlw) return AMX_ERR_HEAPLOW
+
+#define STKMARGIN       ((cell)(16*sizeof(cell)))
+
+#if PAWN_CELL_SIZE==16 || defined AMX_DONT_RELOCATE
   #define JUMPABS(base,ip)      ((cell *)((base) + *(ip)))
   #define RELOC_ABS(base, off)
   #define RELOC_VALUE(base, v)
@@ -71,18 +105,56 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   cell reset_stk, reset_hea, *cip;
   ucell codesize;
   int i;
-  AMXOpcode op;
-  cell offs;
-  int num;
+  #if defined ASM32 || defined JIT
+    cell  parms[9];     /* registers and parameters for assembler _amx */
+  #else
+    AMXOpcode op;
+    cell offs,val;
+    int num;
+  #endif
+  #if defined ASM32
+    extern void const *amx_opcodelist[];
+    #ifdef __WATCOMC__
+      #pragma aux amx_opcodelist "_*"
+    #endif
+  #endif
+  #if defined JIT
+    extern void const *amx_opcodelist_jit[];
+    #ifdef __WATCOMC__
+      #pragma aux amx_opcodelist_jit "_*"
+    #endif
+  #endif
 
   assert(_amx!=NULL);
+  #if defined ASM32 || defined JIT
+    /* HACK: return label table (for amx_BrowseRelocate) if _amx structure
+     * is not passed.
+     */
+    if ((_amx->flags & AMX_FLAG_BROWSE)==AMX_FLAG_BROWSE) {
+      assert(sizeof(cell)==sizeof(void *));
+      assert(retval!=NULL);
+      #if defined ASM32 && defined JIT
+        if ((_amx->flags & AMX_FLAG_JITC)!=0)
+          *retval=(cell)amx_opcodelist_jit;
+        else
+          *retval=(cell)amx_opcodelist;
+      #elif defined ASM32
+        *retval=(cell)amx_opcodelist;
+      #else
+        *retval=(cell)amx_opcodelist_jit;
+      #endif
+      return 0;
+    } /* if */
+  #endif
 
   if (_amx->callback==NULL)
     return AMX_ERR_CALLBACK;
-  if ((_amx->flags & AMX_FLAG_NTVREG)==0)
-    return AMX_ERR_NOTFOUND;
   if ((_amx->flags & AMX_FLAG_RELOC)==0)
     return AMX_ERR_INIT;
+  if ((_amx->flags & AMX_FLAG_NTVREG)==0) {
+    if ((i=amx_Register(_amx,NULL,0))!=AMX_ERR_NONE)
+      return i;
+  } /* if */
   assert((_amx->flags & AMX_FLAG_BROWSE)==0);
 
   /* set up the registers */
@@ -95,7 +167,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   stk=_amx->stk;
   reset_stk=stk;
   reset_hea=hea;
-  frm=alt=pri=0;        /* silence up compiler */
+  alt=frm=pri=0;/* just to avoid compiler warnings */
 
   /* get the start address */
   if (index==AMX_EXEC_MAIN) {
@@ -126,20 +198,22 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   assert(check_endian());
 
   /* sanity checks */
-  assert(AMX_OP_PUSH_PRI==36);
-  assert(AMX_OP_PROC==46);
-  assert(AMX_OP_SHL==65);
-  assert(AMX_OP_SMUL==72);
-  assert(AMX_OP_EQ==95);
-  assert(AMX_OP_INC_PRI==107);
-  assert(AMX_OP_MOVS==117);
-  assert(AMX_OP_SYMBOL==126);
+  assert_static(AMX_OP_PUSH_PRI==36);
+  assert_static(AMX_OP_PROC==46);
+  assert_static(AMX_OP_SHL==65);
+  assert_static(AMX_OP_SMUL==72);
+  assert_static(AMX_OP_EQ==95);
+  assert_static(AMX_OP_INC_PRI==107);
+  assert_static(AMX_OP_MOVS==117);
+  assert_static(AMX_OP_SYMBOL==126);
+  assert_static(AMX_OP_PUSH2_C==138);
+  assert_static(AMX_OP_LOAD_BOTH==154);
   #if PAWN_CELL_SIZE==16
-    assert(sizeof(cell)==2);
+    assert_static(sizeof(cell)==2);
   #elif PAWN_CELL_SIZE==32
-    assert(sizeof(cell)==4);
+    assert_static(sizeof(cell)==4);
   #elif PAWN_CELL_SIZE==64
-    assert(sizeof(cell)==8);
+    assert_static(sizeof(cell)==8);
   #else
     #error Unsupported cell size
   #endif
@@ -157,76 +231,110 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   /* check stack/heap before starting to run */
   CHKMARGIN();
 
-  for ( ;; ) {  
-    _amx->cip=(cell)cip-(cell)code;
+  /* start running */
+#if defined ASM32 || defined JIT
+  /* either the assembler abstract machine or the JIT; both by Marc Peter */
+
+  parms[0] = pri;
+  parms[1] = alt;
+  parms[2] = (cell)cip;
+  parms[3] = (cell)data;
+  parms[4] = stk;
+  parms[5] = frm;
+  parms[6] = (cell)_amx;
+  parms[7] = (cell)code;
+  parms[8] = (cell)codesize;
+
+  #if defined ASM32 && defined JIT
+    if ((_amx->flags & AMX_FLAG_JITC)!=0)
+      i = amx_exec_jit(parms,retval,_amx->stp,hea);
+    else
+      i = amx_exec_asm(parms,retval,_amx->stp,hea);
+  #elif defined ASM32
+    i = amx_exec_asm(parms,retval,_amx->stp,hea);
+  #else
+    i = amx_exec_jit(parms,retval,_amx->stp,hea);
+  #endif
+  if (i == AMX_ERR_SLEEP) {
+    _amx->reset_stk=reset_stk;
+    _amx->reset_hea=reset_hea;
+  } else {
+    /* remove parameters from the stack; do this the "hard" way, because
+     * the assembler version has no internal knowledge of the local
+     * variables, so any "clean" way would be a kludge anyway.
+     */
+    _amx->stk=reset_stk;
+    _amx->hea=reset_hea;
+  } /* if */
+  return i;
+
+#else
+
+  for ( ;; ) {
     LogDebugPrint("Current CIP: %d | Current OP: %s | Param or next OP: %d",
       (uint32_t) cip,
       std::string(AMXOpcodeNames[*cip]).c_str(),
       *(cip + 1)
     );
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    op=(AMXOpcode) *cip++;
+    op=(AMXOpcode) _RCODE();
     switch (op) {
     case AMX_OP_LOAD_PRI:
       GETPARAM(offs);
-      pri= * (cell *)(data+(int)offs);
+      pri=_R(data,offs);
       break;
     case AMX_OP_LOAD_ALT:
       GETPARAM(offs);
-      alt= * (cell *)(data+(int)offs);
+      alt=_R(data,offs);
       break;
     case AMX_OP_LOAD_S_PRI:
       GETPARAM(offs);
-      pri= * (cell *)(data+(int)frm+(int)offs);
+      pri=_R(data,frm+offs);
       break;
     case AMX_OP_LOAD_S_ALT:
       GETPARAM(offs);
-      alt= * (cell *)(data+(int)frm+(int)offs);
+      alt=_R(data,frm+offs);
       break;
     case AMX_OP_LREF_PRI:
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)offs);
-      pri= * (cell *)(data+(int)offs);
+      offs=_R(data,offs);
+      pri=_R(data,offs);
       break;
     case AMX_OP_LREF_ALT:
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)offs);
-      alt= * (cell *)(data+(int)offs);
+      offs=_R(data,offs);
+      alt=_R(data,offs);
       break;
     case AMX_OP_LREF_S_PRI:
-      _amx->frm=frm;
-      _amx->stk=stk;
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)frm+(int)offs);
-      pri= * (cell *)(data+(int)offs);
+      offs=_R(data,frm+offs);
+      pri=_R(data,offs);
       break;
     case AMX_OP_LREF_S_ALT:
-      _amx->frm=frm;
-      _amx->stk=stk;  
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)frm+(int)offs);
-      alt= * (cell *)(data+(int)offs);
+      offs=_R(data,frm+offs);
+      alt=_R(data,offs);
       break;
     case AMX_OP_LOAD_I:
       /* verify address */
       if (pri>=hea && pri<stk || (ucell)pri>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      pri= * (cell *)(data+(int)pri);
+      pri=_R(data,pri);
       break;
     case AMX_OP_LODB_I:
       GETPARAM(offs);
       /* verify address */
       if (pri>=hea && pri<stk || (ucell)pri>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      switch (offs) {
+      switch ((int)offs) {
       case 1:
-        pri= * (data+(int)pri);
+        pri=_R8(data,pri);
         break;
       case 2:
-        pri= * (uint16_t *)(data+(int)pri);
+        pri=_R16(data,pri);
         break;
       case 4:
-        pri= * (uint32_t *)(data+(int)pri);
+        pri=_R32(data,pri);
         break;
       } /* switch */
       break;
@@ -246,64 +354,60 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_STOR_PRI:
       GETPARAM(offs);
-      *(cell *)(data+(int)offs)=pri;
+      _W(data,offs,pri);
       break;
     case AMX_OP_STOR_ALT:
       GETPARAM(offs);
-      *(cell *)(data+(int)offs)=alt;
+      _W(data,offs,alt);
       break;
     case AMX_OP_STOR_S_PRI:
       GETPARAM(offs);
-      *(cell *)(data+(int)frm+(int)offs)=pri;
+      _W(data,frm+offs,pri);
       break;
     case AMX_OP_STOR_S_ALT:
       GETPARAM(offs);
-      *(cell *)(data+(int)frm+(int)offs)=alt;
+      _W(data,frm+offs,alt);
       break;
     case AMX_OP_SREF_PRI:
-      _amx->frm=frm;
-      _amx->stk=stk;
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)offs);
-      *(cell *)(data+(int)offs)=pri;
+      offs=_R(data,offs);
+      _W(data,offs,pri);
       break;
     case AMX_OP_SREF_ALT:
-      _amx->frm = frm;
-      _amx->stk = stk;
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)offs);
-      *(cell *)(data+(int)offs)=alt;
+      offs=_R(data,offs);
+      _W(data,offs,alt);
       break;
     case AMX_OP_SREF_S_PRI:
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)frm+(int)offs);
-      *(cell *)(data+(int)offs)=pri;
+      offs=_R(data,frm+offs);
+      _W(data,offs,pri);
       break;
     case AMX_OP_SREF_S_ALT:
       GETPARAM(offs);
-      offs= * (cell *)(data+(int)frm+(int)offs);
-      *(cell *)(data+(int)offs)=alt;
+      offs=_R(data,frm+offs);
+      _W(data,offs,alt);
       break;
     case AMX_OP_STOR_I:
       /* verify address */
       if (alt>=hea && alt<stk || (ucell)alt>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      *(cell *)(data+(int)alt)=pri;
+      _W(data,alt,pri);
       break;
     case AMX_OP_STRB_I:
       GETPARAM(offs);
       /* verify address */
       if (alt>=hea && alt<stk || (ucell)alt>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      switch (offs) {
+      switch ((int)offs) {
       case 1:
-        *(data+(int)alt)=(unsigned char)pri;
+        _W8(data,alt,pri);
         break;
       case 2:
-        *(uint16_t *)(data+(int)alt)=(uint16_t)pri;
+        _W16(data,alt,pri);
         break;
       case 4:
-        *(uint32_t *)(data+(int)alt)=(uint32_t)pri;
+        _W32(data,alt,pri);
         break;
       } /* switch */
       break;
@@ -312,7 +416,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       /* verify address */
       if (offs>=hea && offs<stk || (ucell)offs>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      pri= * (cell *)(data+(int)offs);
+      pri=_R(data,offs);
       break;
     case AMX_OP_LIDX_B:
       GETPARAM(offs);
@@ -320,7 +424,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       /* verify address */
       if (offs>=hea && offs<stk || (ucell)offs>=(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      pri= * (cell *)(data+(int)offs);
+      pri=_R(data,offs);
       break;
     case AMX_OP_IDXADDR:
       pri=pri*sizeof(cell)+alt;
@@ -345,7 +449,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_LCTRL:
       GETPARAM(offs);
-      switch (offs) {
+      switch ((int)offs) {
       case 0:
         pri=hdr->cod;
         break;
@@ -367,14 +471,11 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       case 6:
         pri=(cell)((unsigned char *)cip - code);
         break;
-      case 0xFF:
-        pri=1;
-        break;
       } /* switch */
       break;
     case AMX_OP_SCTRL:
       GETPARAM(offs);
-      switch (offs) {
+      switch ((int)offs) {
       case 0:
       case 1:
       case 3:
@@ -422,11 +523,11 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_PUSH:
       GETPARAM(offs);
-      PUSH(* (cell *)(data+(int)offs));
+      PUSH(_R(data,offs));
       break;
     case AMX_OP_PUSH_S:
       GETPARAM(offs);
-      PUSH(* (cell *)(data+(int)frm+(int)offs));
+      PUSH(_R(data,frm+offs));
       break;
     case AMX_OP_PAMX_OP_PRI:
       POP(pri);
@@ -468,12 +569,16 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       if ((ucell)offs>=codesize)
         ABORT(_amx,AMX_ERR_MEMACCESS);
       cip=(cell *)(code+(int)offs);
-      stk+= *(cell *)(data+(int)stk) + sizeof(cell); /* remove parameters from the stack */
+      stk+=_R(data,stk)+sizeof(cell);   /* remove parameters from the stack */
       _amx->stk=stk;
       break;
     case AMX_OP_CALL:
       PUSH(((unsigned char *)cip-code)+sizeof(cell));/* skip address */
       cip=JUMPABS(code, cip);                   /* jump to the address */
+      break;
+    case AMX_OP_CALL_PRI:
+      PUSH((unsigned char *)cip-code);
+      cip=(cell *)(code+(int)pri);
       break;
     case AMX_OP_JUMP:
       /* since the GETPARAM() macro modifies cip, you cannot
@@ -587,22 +692,44 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
     case AMX_OP_SDIV:
       if (alt==0)
         ABORT(_amx,AMX_ERR_DIVIDE);
-      /* divide must always round down; this is a bit
-       * involved to do in a machine-independent way.
-       */
-      offs=(pri % alt + alt) % alt;     /* true modulus */
-      pri=(pri - offs) / alt;           /* division result */
-      alt=offs;
+      /* use floored division and matching remainder */
+      offs=alt;
+      #if defined TRUNC_SDIV
+        pri=pri/offs;
+        alt=pri%offs;
+      #else
+        val=pri;                /* portable routine for truncated division */
+        pri=IABS(pri)/IABS(offs);
+        if ((cell)(val ^ offs)<0)
+          pri=-pri;
+        alt=val-pri*offs;       /* calculate the matching remainder */
+      #endif
+      /* now "fiddle" with the values to get floored division */
+      if (alt!=0 && (cell)(alt ^ offs)<0) {
+        pri--;
+        alt+=offs;
+      } /* if */
       break;
     case AMX_OP_SDIV_ALT:
       if (pri==0)
         ABORT(_amx,AMX_ERR_DIVIDE);
-      /* divide must always round down; this is a bit
-       * involved to do in a machine-independent way.
-       */
-      offs=(alt % pri + pri) % pri;     /* true modulus */
-      pri=(alt - offs) / pri;           /* division result */
-      alt=offs;
+      /* use floored division and matching remainder */
+      offs=pri;
+      #if defined TRUNC_SDIV
+        pri=alt/offs;
+        alt=alt%offs;
+      #else
+        val=alt;                /* portable routine for truncated division */
+        pri=IABS(alt)/IABS(offs);
+        if ((cell)(val ^ offs)<0)
+          pri=-pri;
+        alt=val-pri*offs;       /* calculate the matching remainder */
+      #endif
+      /* now "fiddle" with the values to get floored division */
+      if (alt!=0 && (cell)(alt ^ offs)<0) {
+        pri--;
+        alt+=offs;
+      } /* if */
       break;
     case AMX_OP_UMUL:
       pri=(ucell)pri * (ucell)alt;
@@ -664,11 +791,11 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_ZERO:
       GETPARAM(offs);
-      *(cell *)(data+(int)offs)=0;
+      _W(data,offs,0);
       break;
     case AMX_OP_ZERO_S:
       GETPARAM(offs);
-      *(cell *)(data+(int)frm+(int)offs)=0;
+      _W(data,frm+offs,0);
       break;
     case AMX_OP_SIGN_PRI:
       if ((pri & 0xff)>=0x80)
@@ -724,14 +851,29 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_INC:
       GETPARAM(offs);
-      *(cell *)(data+(int)offs) += 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)offs) += 1;
+      #else
+        val=_R(data,offs);
+        _W(data,offs,val+1);
+      #endif
       break;
     case AMX_OP_INC_S:
       GETPARAM(offs);
-      *(cell *)(data+(int)frm+(int)offs) += 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)(frm+offs)) += 1;
+      #else
+        val=_R(data,frm+offs);
+        _W(data,frm+offs,val+1);
+      #endif
       break;
     case AMX_OP_INC_I:
-      *(cell *)(data+(int)pri) += 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)pri) += 1;
+      #else
+        val=_R(data,pri);
+        _W(data,pri,val+1);
+      #endif
       break;
     case AMX_OP_DEC_PRI:
       pri--;
@@ -741,14 +883,29 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_DEC:
       GETPARAM(offs);
-      *(cell *)(data+(int)offs) -= 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)offs) -= 1;
+      #else
+        val=_R(data,offs);
+        _W(data,offs,val-1);
+      #endif
       break;
     case AMX_OP_DEC_S:
       GETPARAM(offs);
-      *(cell *)(data+(int)frm+(int)offs) -= 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)(frm+offs)) -= 1;
+      #else
+        val=_R(data,frm+offs);
+        _W(data,frm+offs,val-1);
+      #endif
       break;
     case AMX_OP_DEC_I:
-      *(cell *)(data+(int)pri) -= 1;
+      #if defined _R_DEFAULT
+        *(cell *)(data+(int)pri) -= 1;
+      #else
+        val=_R(data,pri);
+        _W(data,pri,val-1);
+      #endif
       break;
     case AMX_OP_MOVS:
       GETPARAM(offs);
@@ -763,7 +920,18 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         ABORT(_amx,AMX_ERR_MEMACCESS);
       if ((alt+offs)>hea && (alt+offs)<stk || (ucell)(alt+offs)>(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      memcpy(data+(int)alt, data+(int)pri, (int)offs);
+      #if defined _R_DEFAULT
+        memcpy(data+(int)alt, data+(int)pri, (int)offs);
+      #else
+        for (i=0; i+4<offs; i+=4) {
+          val=_R32(data,pri+i);
+          _W32(data,alt+i,val);
+        } /* for */
+        for ( ; i<offs; i++) {
+          val=_R8(data,pri+i);
+          _W8(data,alt+i,val);
+        } /* for */
+      #endif
       break;
     case AMX_OP_CMPS:
       GETPARAM(offs);
@@ -778,7 +946,15 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         ABORT(_amx,AMX_ERR_MEMACCESS);
       if ((alt+offs)>hea && (alt+offs)<stk || (ucell)(alt+offs)>(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
-      pri=memcmp(data+(int)alt, data+(int)pri, (int)offs);
+      #if defined _R_DEFAULT
+        pri=memcmp(data+(int)alt, data+(int)pri, (int)offs);
+      #else
+        pri=0;
+        for (i=0; i+4<offs && pri==0; i+=4)
+          pri=_R32(data,alt+i)-_R32(data,pri+i);
+        for ( ; i<offs && pri==0; i++)
+          pri=_R8(data,alt+i)-_R8(data,pri+i);
+      #endif
       break;
     case AMX_OP_FILL:
       GETPARAM(offs);
@@ -788,7 +964,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       if ((alt+offs)>hea && (alt+offs)<stk || (ucell)(alt+offs)>(ucell)_amx->stp)
         ABORT(_amx,AMX_ERR_MEMACCESS);
       for (i=(int)alt; (size_t)offs>=sizeof(cell); i+=sizeof(cell), offs-=sizeof(cell))
-        *(cell *)(data+i) = pri;
+        _W32(data,i,pri);
       break;
     case AMX_OP_HALT:
       GETPARAM(offs);
@@ -798,18 +974,21 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       _amx->frm=frm;
       _amx->pri=pri;
       _amx->alt=alt;
-      if (offs!=AMX_ERR_SLEEP) {
-        ABORT(_amx,(int)offs);
-      } else {
-        _amx->cip=(cell)((unsigned char*)cip-code);
+      _amx->cip=(cell)((unsigned char*)cip-code);
+      if (offs==AMX_ERR_SLEEP) {
+        _amx->stk=stk;
+        _amx->hea=hea;
         _amx->reset_stk=reset_stk;
         _amx->reset_hea=reset_hea;
         return (int)offs;
       } /* if */
+      ABORT(_amx,(int)offs);
     case AMX_OP_BOUNDS:
       GETPARAM(offs);
-      if ((ucell)pri>(ucell)offs)
+      if ((ucell)pri>(ucell)offs) {
+        _amx->cip=(cell)((unsigned char *)cip-code);
         ABORT(_amx,AMX_ERR_BOUNDS);
+      } /* if */
       break;
     case AMX_OP_SYSREQ_PRI:
       /* save a few registers */
@@ -848,25 +1027,6 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         ABORT(_amx,num);
       } /* if */
       break;
-    case AMX_OP_SYSREQ_D:
-      GETPARAM(offs);
-      /* save a few registers */
-      _amx->cip=(cell)((unsigned char *)cip-code);
-      _amx->hea=hea;
-      _amx->frm=frm;
-      _amx->stk=stk;
-      pri=((AMX_NATIVE)offs)(_amx,(cell *)(data+(int)stk));
-      if (_amx->error!=AMX_ERR_NONE) {
-        if (_amx->error==AMX_ERR_SLEEP) {
-          _amx->pri=pri;
-          _amx->alt=alt;
-          _amx->reset_stk=reset_stk;
-          _amx->reset_hea=reset_hea;
-          return num;
-        } /* if */
-        ABORT(_amx,_amx->error);
-      } /* if */
-      break;
     case AMX_OP_LINE:
       SKIPPARAM(2);
       break;
@@ -879,6 +1039,9 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_SYMTAG:
       SKIPPARAM(1);
+      break;
+    case AMX_OP_JUMP_PRI:
+      cip=(cell *)(code+(int)pri);
       break;
     case AMX_OP_SWITCH: {
       cell *cptr;
@@ -893,13 +1056,13 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     } /* case */
     case AMX_OP_SWAP_PRI:
-      offs=*(cell *)(data+(int)stk);
-      *(cell *)(data+(int)stk)=pri;
+      offs=_R(data,stk);
+      _W32(data,stk,pri);
       pri=offs;
       break;
     case AMX_OP_SWAP_ALT:
-      offs=*(cell *)(data+(int)stk);
-      *(cell *)(data+(int)stk)=alt;
+      offs=_R(data,stk);
+      _W32(data,stk,alt);
       alt=offs;
       break;
     case AMX_OP_PUSH_ADR:
@@ -908,6 +1071,30 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_NOP:
       break;
+#if !defined AMX_NO_MACRO_INSTR
+    case AMX_OP_SYSREQ_N:
+      GETPARAM(offs);
+      GETPARAM(val);
+      PUSH(val);
+      /* save a few registers */
+      _amx->cip=(cell)((unsigned char *)cip-code);
+      _amx->hea=hea;
+      _amx->frm=frm;
+      _amx->stk=stk;
+      num=_amx->callback(_amx,offs,&pri,(cell *)(data+(int)stk));
+      stk+=val+4;
+      if (num!=AMX_ERR_NONE) {
+        if (num==AMX_ERR_SLEEP) {
+          _amx->pri=pri;
+          _amx->alt=alt;
+          _amx->reset_stk=reset_stk;
+          _amx->reset_hea=reset_hea;
+          return num;
+        } /* if */
+        ABORT(_amx,num);
+      } /* if */
+      break;
+#endif
     case AMX_OP_BREAK:
       assert((_amx->flags & AMX_FLAG_BROWSE)==0);
       if (_amx->debug!=NULL) {
@@ -929,6 +1116,147 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         } /* if */
       } /* if */
       break;
+#if !defined AMX_NO_MACRO_INSTR
+    case AMX_OP_PUSH5:
+      GETPARAM(offs);
+      PUSH(_R(data,offs));
+      /* drop through */
+    case AMX_OP_PUSH4:
+      GETPARAM(offs);
+      PUSH(_R(data,offs));
+      /* drop through */
+    case AMX_OP_PUSH3:
+      GETPARAM(offs);
+      PUSH(_R(data,offs));
+      /* drop through */
+    case AMX_OP_PUSH2:
+      GETPARAM(offs);
+      PUSH(_R(data,offs));
+      GETPARAM(offs);
+      PUSH(_R(data,offs));
+      break;
+    case AMX_OP_PUSH5_S:
+      GETPARAM(offs);
+      PUSH(_R(data,frm+offs));
+      /* drop through */
+    case AMX_OP_PUSH4_S:
+      GETPARAM(offs);
+      PUSH(_R(data,frm+offs));
+      /* drop through */
+    case AMX_OP_PUSH3_S:
+      GETPARAM(offs);
+      PUSH(_R(data,frm+offs));
+      /* drop through */
+    case AMX_OP_PUSH2_S:
+      GETPARAM(offs);
+      PUSH(_R(data,frm+offs));
+      GETPARAM(offs);
+      PUSH(_R(data,frm+offs));
+      break;
+    case AMX_OP_PUSH5_C:
+      GETPARAM(offs);
+      PUSH(offs);
+      /* drop through */
+    case AMX_OP_PUSH4_C:
+      GETPARAM(offs);
+      PUSH(offs);
+      /* drop through */
+    case AMX_OP_PUSH3_C:
+      GETPARAM(offs);
+      PUSH(offs);
+      /* drop through */
+    case AMX_OP_PUSH2_C:
+      GETPARAM(offs);
+      PUSH(offs);
+      GETPARAM(offs);
+      PUSH(offs);
+      break;
+    case AMX_OP_PUSH5_ADR:
+      GETPARAM(offs);
+      PUSH(frm+offs);
+      /* drop through */
+    case AMX_OP_PUSH4_ADR:
+      GETPARAM(offs);
+      PUSH(frm+offs);
+      /* drop through */
+    case AMX_OP_PUSH3_ADR:
+      GETPARAM(offs);
+      PUSH(frm+offs);
+      /* drop through */
+    case AMX_OP_PUSH2_ADR:
+      GETPARAM(offs);
+      PUSH(frm+offs);
+      GETPARAM(offs);
+      PUSH(frm+offs);
+      break;
+    case AMX_OP_LOAD_BOTH:
+      GETPARAM(offs);
+      pri=_R(data,offs);
+      GETPARAM(offs);
+      alt=_R(data,offs);
+      break;
+    case AMX_OP_LOAD_S_BOTH:
+      GETPARAM(offs);
+      pri=_R(data,frm+offs);
+      GETPARAM(offs);
+      alt=_R(data,frm+offs);
+      break;
+    case AMX_OP_CONST:
+      GETPARAM(offs);
+      GETPARAM(val);
+      _W32(data,offs,val);
+      break;
+    case AMX_OP_CONST_S:
+      GETPARAM(offs);
+      GETPARAM(val);
+      _W32(data,frm+offs,val);
+      break;
+#endif
+#if !defined AMX_DONT_RELOCATE
+    case AMX_OP_SYSREQ_D: /* see AMX_OP_SYSREQ_C */
+      GETPARAM(offs);
+      /* save a few registers */
+      _amx->cip=(cell)((unsigned char *)cip-code);
+      _amx->hea=hea;
+      _amx->frm=frm;
+      _amx->stk=stk;
+      pri=((AMX_NATIVE)offs)(_amx,(cell *)(data+(int)stk));
+      if (_amx->error!=AMX_ERR_NONE) {
+        if (_amx->error==AMX_ERR_SLEEP) {
+          _amx->pri=pri;
+          _amx->alt=alt;
+          _amx->reset_stk=reset_stk;
+          _amx->reset_hea=reset_hea;
+          return AMX_ERR_SLEEP;
+        } /* if */
+        ABORT(_amx,_amx->error);
+      } /* if */
+      break;
+#endif
+#if !defined AMX_NO_MACRO_INSTR && !defined AMX_DONT_RELOCATE
+    case AMX_OP_SYSREQ_ND:    /* see SYSREQ_N */
+      GETPARAM(offs);
+      GETPARAM(val);
+      PUSH(val);
+      /* save a few registers */
+      _amx->cip=(cell)((unsigned char *)cip-code);
+      _amx->hea=hea;
+      _amx->frm=frm;
+      _amx->stk=stk;
+      pri=((AMX_NATIVE)offs)(_amx,(cell *)(data+(int)stk));
+      stk+=val+4;
+      if (_amx->error!=AMX_ERR_NONE) {
+        if (_amx->error==AMX_ERR_SLEEP) {
+          _amx->pri=pri;
+          _amx->alt=alt;
+          _amx->reset_stk=reset_stk;
+          _amx->reset_hea=reset_hea;
+          return AMX_ERR_SLEEP;
+        } /* if */
+        ABORT(_amx,_amx->error);
+      } /* if */
+      break;
+#endif
     default:
       /* case AMX_OP_FILE:          should not occur during execution
        * case AMX_OP_CASETBL:       should not occur during execution
@@ -937,4 +1265,5 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       ABORT(_amx,AMX_ERR_INVINSTR);
     } /* switch */
   } /* for */
+#endif
 }

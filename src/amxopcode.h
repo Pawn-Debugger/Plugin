@@ -78,8 +78,15 @@ enum AMXOpcode {
   AMX_OP_SYMBOL,       AMX_OP_SRANGE,       AMX_OP_JUMP_PRI,
   AMX_OP_SWITCH,       AMX_OP_CASETBL,      AMX_OP_SWAP_PRI,
   AMX_OP_SWAP_ALT,     AMX_OP_PUSH_ADR,     AMX_OP_NOP,
-  AMX_OP_SYSREQ_D,     AMX_OP_SYMTAG,       AMX_OP_BREAK,
-  AMX_OP_LAST_
+  AMX_OP_SYSREQ_N,     AMX_OP_SYMTAG,       AMX_OP_BREAK,
+  AMX_OP_PUSH2_C,      AMX_OP_PUSH2,        AMX_OP_PUSH2_S,
+  AMX_OP_PUSH2_ADR,    AMX_OP_PUSH3_C,      AMX_OP_PUSH3,
+  AMX_OP_PUSH3_S,      AMX_OP_PUSH3_ADR,    AMX_OP_PUSH4_C,
+  AMX_OP_PUSH4,        AMX_OP_PUSH4_S,      AMX_OP_PUSH4_ADR,
+  AMX_OP_PUSH5_C,      AMX_OP_PUSH5,        AMX_OP_PUSH5_S,
+  AMX_OP_PUSH5_ADR,    AMX_OP_LOAD_BOTH,    AMX_OP_LOAD_S_BOTH,
+  AMX_OP_CONST,        AMX_OP_CONST_S,      AMX_OP_SYSREQ_D,
+  AMX_OP_SYSREQ_ND,    AMX_OP_LAST_
 };
 
 const int NUM_AMX_OPCODES = AMX_OP_LAST_;
@@ -129,8 +136,8 @@ constexpr std::array<std::string_view, NUM_AMX_OPCODES> AMXOpcodeNames = {
   "OP_PUSH_C"sv,
   "OP_PUSH"sv,
   "OP_PUSH_S"sv,
-  "OP_PAMX_OP_PRI"sv,
-  "OP_PAMX_OP_ALT"sv,
+  "OP_P"sv"OP_PRI"sv,
+  "OP_P"sv"OP_ALT"sv,
   "OP_STACK"sv,
   "OP_HEAP"sv,
   "OP_PROC"sv,
@@ -222,9 +229,31 @@ constexpr std::array<std::string_view, NUM_AMX_OPCODES> AMXOpcodeNames = {
   "OP_SWAP_ALT"sv,
   "OP_PUSH_ADR"sv,
   "OP_NOP"sv,
-  "OP_SYSREQ_D"sv,
+  "OP_SYSREQ_N"sv,
   "OP_SYMTAG"sv,
-  "OP_BREAK"sv
+  "OP_BREAK"sv,
+  "OP_PUSH2_C"sv,
+  "OP_PUSH2"sv,
+  "OP_PUSH2_S"sv,
+  "OP_PUSH2_ADR"sv,
+  "OP_PUSH3_C"sv,
+  "OP_PUSH3"sv,
+  "OP_PUSH3_S"sv,
+  "OP_PUSH3_ADR"sv,
+  "OP_PUSH4_C"sv,
+  "OP_PUSH4"sv,
+  "OP_PUSH4_S"sv,
+  "OP_PUSH4_ADR"sv,
+  "OP_PUSH5_C"sv,
+  "OP_PUSH5"sv,
+  "OP_PUSH5_S"sv,
+  "OP_PUSH5_ADR"sv,
+  "OP_LOAD_BOTH"sv,
+  "OP_LOAD_S_BOTH"sv,
+  "OP_CONST"sv,
+  "OP_CONST_S"sv,
+  "OP_SYSREQ_D"sv,
+  "OP_SYSREQ_ND"sv
 };
 
 #endif // !AMXOPCODE_H
