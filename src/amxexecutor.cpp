@@ -112,40 +112,8 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
     cell offs,val;
     int num;
   #endif
-  #if defined ASM32
-    extern void const *amx_opcodelist[];
-    #ifdef __WATCOMC__
-      #pragma aux amx_opcodelist "_*"
-    #endif
-  #endif
-  #if defined JIT
-    extern void const *amx_opcodelist_jit[];
-    #ifdef __WATCOMC__
-      #pragma aux amx_opcodelist_jit "_*"
-    #endif
-  #endif
 
   assert(_amx!=NULL);
-  #if defined ASM32 || defined JIT
-    /* HACK: return label table (for amx_BrowseRelocate) if _amx structure
-     * is not passed.
-     */
-    if ((_amx->flags & AMX_FLAG_BROWSE)==AMX_FLAG_BROWSE) {
-      assert(sizeof(cell)==sizeof(void *));
-      assert(retval!=NULL);
-      #if defined ASM32 && defined JIT
-        if ((_amx->flags & AMX_FLAG_JITC)!=0)
-          *retval=(cell)amx_opcodelist_jit;
-        else
-          *retval=(cell)amx_opcodelist;
-      #elif defined ASM32
-        *retval=(cell)amx_opcodelist;
-      #else
-        *retval=(cell)amx_opcodelist_jit;
-      #endif
-      return 0;
-    } /* if */
-  #endif
 
   if (_amx->callback==NULL)
     return AMX_ERR_CALLBACK;
@@ -230,45 +198,6 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   } /* if */
   /* check stack/heap before starting to run */
   CHKMARGIN();
-
-  /* start running */
-#if defined ASM32 || defined JIT
-  /* either the assembler abstract machine or the JIT; both by Marc Peter */
-
-  parms[0] = pri;
-  parms[1] = alt;
-  parms[2] = (cell)cip;
-  parms[3] = (cell)data;
-  parms[4] = stk;
-  parms[5] = frm;
-  parms[6] = (cell)_amx;
-  parms[7] = (cell)code;
-  parms[8] = (cell)codesize;
-
-  #if defined ASM32 && defined JIT
-    if ((_amx->flags & AMX_FLAG_JITC)!=0)
-      i = amx_exec_jit(parms,retval,_amx->stp,hea);
-    else
-      i = amx_exec_asm(parms,retval,_amx->stp,hea);
-  #elif defined ASM32
-    i = amx_exec_asm(parms,retval,_amx->stp,hea);
-  #else
-    i = amx_exec_jit(parms,retval,_amx->stp,hea);
-  #endif
-  if (i == AMX_ERR_SLEEP) {
-    _amx->reset_stk=reset_stk;
-    _amx->reset_hea=reset_hea;
-  } else {
-    /* remove parameters from the stack; do this the "hard" way, because
-     * the assembler version has no internal knowledge of the local
-     * variables, so any "clean" way would be a kludge anyway.
-     */
-    _amx->stk=reset_stk;
-    _amx->hea=reset_hea;
-  } /* if */
-  return i;
-
-#else
 
   for ( ;; ) {
     LogDebugPrint("Current CIP: %d | Current OP: %s | Param or next OP: %d",
@@ -1265,5 +1194,4 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       ABORT(_amx,AMX_ERR_INVINSTR);
     } /* switch */
   } /* for */
-#endif
 }
