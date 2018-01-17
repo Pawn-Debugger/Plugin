@@ -36,6 +36,7 @@
 #include "amxcallstack.h"
 #include "amxdebuginfo.h"
 #include "amxerror.h"
+#include "amxexecutor.h"
 #include "amxopcode.h"
 #include "amxpathfinder.h"
 #include "amxscript.h"
@@ -104,7 +105,7 @@ void SplitString(const std::string &s, char delim, Func func) {
 }
 
 template<typename FormattedPrinter>
-class PrintLine : public std::unary_function<const std::string &, void> {
+class PrintLine : public std::function<void(const std::string &)> {
  public:
   PrintLine(FormattedPrinter printer) : printer_(printer) {}
   void operator()(const std::string &line) {
@@ -145,7 +146,7 @@ int CrashDetect::Load() {
   const char *var = getenv("AMX_PATH");
   if (var != 0) {
     SplitString(var, fileutils::kNativePathListSepChar,
-        std::bind1st(std::mem_fun(&AMXPathFinder::AddSearchPath), &amx_finder));
+        [&amx_finder](auto path) { amx_finder.AddSearchPath(path); });
   }
 
   amx_path_ = amx_finder.Find(amx());
@@ -203,43 +204,6 @@ int CrashDetect::HandleAMXCallback(cell index, cell *result, cell *params) {
   return error;
 }
 
-int CrashDetect::HandleAMXExec(cell *retval, int index) {
-  call_stack_.Push(AMXCall::Public(amx(), index));
-
-  if (trace_flags_ & TRACE_FUNCTIONS) {
-    last_frame_ = 0;
-  }
-  if (trace_flags_ & TRACE_PUBLICS) {
-    if (cell address = amx().GetPublicAddress(index)) {
-      AMXStackTrace trace =
-        GetAMXStackTrace(amx(), amx().GetFrm(), amx().GetCip(), 1);
-      AMXStackFrame frame = trace.current_frame();
-      if (frame.return_address() != 0) {
-        frame.set_caller_address(address);
-        PrintTraceFrame(frame, debug_info_);
-      } else {
-        AMXStackFrame fake_frame(amx(), amx().GetFrm(), 0, 0, address);
-        PrintTraceFrame(fake_frame, debug_info_);
-      }
-    }
-  }
-
-  int error = ::amx_Exec(amx(), retval, index);
-  if (error == AMX_ERR_CALLBACK ||
-      error == AMX_ERR_NOTFOUND ||
-      error == AMX_ERR_INIT     ||
-      error == AMX_ERR_INDEX    ||
-      error == AMX_ERR_SLEEP)
-  {
-    // For these types of errors amx_Error() is not called because of
-    // early return from amx_Exec().
-    HandleAMXExecError(index, retval, error);
-  }
-
-  call_stack_.Pop();
-  return error;
-}
-
 void CrashDetect::HandleAMXExecError(int index,
                                      cell *retval,
                                      const AMXError &error) {
@@ -286,7 +250,7 @@ void CrashDetect::HandleAMXExecError(int index,
       cell suppress_addr, *suppress_ptr;
       amx_PushArray(amx(), &suppress_addr, &suppress_ptr, &suppress, 1);
       amx_Push(amx(), error.code());
-      HandleAMXExec(retval, callback_index);
+      AMXExecutor::GetInstance(amx())->HandleAMXExec(retval, callback_index);
       amx_Release(amx(), suppress_addr);
       suppress = *suppress_ptr;
     }

@@ -58,7 +58,6 @@ class CrashDetect : public AMXService<CrashDetect> {
 
   int HandleAMXDebug();
   int HandleAMXCallback(cell index, cell *result, cell *params);
-  int HandleAMXExec(cell *retval, int index);
   void HandleAMXExecError(int index, cell *retval, const AMXError &error);
 
   static void OnCrash(const os::Context &context);

@@ -12,7 +12,7 @@ if(WIN32)
                   -D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-set(CRASHDETECT_SOURCES
+set(PLUGIN_SOURCES
   amxcallstack.cpp
   amxcallstack.h
   amxdebuginfo.cpp
@@ -28,6 +28,8 @@ set(CRASHDETECT_SOURCES
   amxservice.h
   amxstacktrace.cpp
   amxstacktrace.h
+  amxexecutor.h
+  amxexecutor.cpp
   crashdetect.cpp
   crashdetect.h
   fileutils.cpp
@@ -51,39 +53,44 @@ set(CRASHDETECT_SOURCES
 configure_file(plugin.rc.in plugin.rc @ONLY)
 configure_file(pluginversion.h.in pluginversion.h @ONLY)
 
-list(APPEND CRASHDETECT_SOURCES
+list(APPEND PLUGIN_SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/plugin.rc
   ${CMAKE_CURRENT_BINARY_DIR}/pluginversion.h
 )
 
 if(WIN32 OR CYGWIN)
-  list(APPEND CRASHDETECT_SOURCES
+  list(APPEND PLUGIN_SOURCES
     fileutils-win32.cpp
     os-win32.cpp
     stacktrace-win32.cpp
   )
 else()
-  list(APPEND CRASHDETECT_SOURCES
+  list(APPEND PLUGIN_SOURCES
     fileutils-unix.cpp
     os-unix.cpp
     stacktrace-unix.cpp
   )
 endif()
 
-add_samp_plugin(crashdetect ${CRASHDETECT_SOURCES})
+add_samp_plugin(plugin ${PLUGIN_SOURCES})
 
 add_subdirectory(amx)
-target_link_Libraries(crashdetect amx configreader pcre subhook)
+target_link_Libraries(plugin amx configreader pcre subhook)
 
 if(WIN32)
-  target_link_libraries(crashdetect DbgHelp)
+  target_link_libraries(plugin DbgHelp)
 endif()
 
-install(TARGETS crashdetect LIBRARY DESTINATION ".")
+install(TARGETS plugin LIBRARY DESTINATION ".")
 
 if(MSVC_IDE AND MSVC_VERSION GREATER 1200)
   set(config \${CMAKE_INSTALL_CONFIG_NAME})
-  set(pdb_name crashdetect.pdb)
+  set(pdb_name debug-plugin.pdb)
   set(pdb_path ${CMAKE_CURRENT_BINARY_DIR}/${config}/${pdb_name})
   install(FILES ${pdb_path} DESTINATION ".")
 endif()
+
+set(CMAKE_CXX_STANDARD 17)
+if(MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+endif(MSVC)

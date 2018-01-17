@@ -28,6 +28,7 @@
 #include <subhook.h>
 
 #include "amxerror.h"
+#include "amxexecutor.h"
 #include "crashdetect.h"
 #include "fileutils.h"
 #include "logprintf.h"
@@ -47,10 +48,7 @@ static int AMXAPI AmxCallback(AMX *amx, cell index, cell *result, cell *params) 
 }
 
 static int AMXAPI AmxExec(AMX *amx, cell *retval, int index) {
-  if (amx->flags & AMX_FLAG_BROWSE) {
-    return amx_Exec(amx, retval, index);
-  }
-  return CrashDetect::GetInstance(amx)->HandleAMXExec(retval, index);
+  return AMXExecutor::GetInstance(amx)->HandleAMXExec(retval, index);
 }
 
 static void AMXAPI AmxExecError(AMX *amx, cell index, cell *retval, int error) {

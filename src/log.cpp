@@ -36,7 +36,7 @@ class Log {
  public:
   Log(): file_(0) {
     ConfigReader server_cfg("server.cfg");
-    std::string filename = server_cfg.GetValueWithDefault("crashdetect_log");
+    std::string filename = server_cfg.GetValueWithDefault("debug_plugin_log");
     if (!filename.empty()) {
       file_ = std::fopen(filename.c_str(), "a");
       std::setbuf(file_, 0);

@@ -203,7 +203,7 @@ AMXStackTrace GetAMXStackTrace(AMXScript amx,
 
 namespace {
 
-class IsArgumentOf : public std::unary_function<AMXDebugSymbol, bool> {
+class IsArgumentOf : public std::function<bool(AMXDebugSymbol)> {
  public:
   IsArgumentOf(cell function_address) : function_address_(function_address) {}
   bool operator()(AMXDebugSymbol symbol) const {

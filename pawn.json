@@ -1,24 +1,24 @@
 {
-    "user": "Zeex",
-    "repo": "samp-plugin-crashdetect",
+    "user": "Pawn-Debugger",
+    "repo": "Plugin",
     "include_path": "include",
     "resources": [
         {
-            "name": "^crashdetect-(.*)-linux.tar.gz$",
+            "name": "^debug-plugin-(.*)-linux.tar.gz$",
             "platform": "linux",
             "archive": true,
             "includes": ["."],
-            "plugins": ["crashdetect-(.*)-linux/crashdetect.so"]
+            "plugins": ["debug-plugin-(.*)-linux/debug-plugin.so"]
         },
         {
-            "name": "^crashdetect-(.*)-win32.zip$",
+            "name": "^debug-plugin-(.*)-win32.zip$",
             "platform": "windows",
             "archive": true,
             "includes": ["."],
-            "plugins": ["crashdetect-(.*)-win32/crashdetect.dll"]
+            "plugins": ["debug-plugin-(.*)-win32/debug-plugin.dll"]
         }
     ],
     "runtime": {
-        "plugins": ["Zeex/samp-plugin-crashdetect"]
+        "plugins": ["Pawn-Debugger/Plugin"]
     }
 }
