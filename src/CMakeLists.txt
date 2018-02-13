@@ -9,10 +9,14 @@ include_directories(
 
 if(WIN32)
   add_definitions(-D_WIN32_WINNT=_WIN32_WINNT_WINXP
-                  -D_CRT_SECURE_NO_WARNINGS)
+                  -D_CRT_SECURE_NO_WARNINGS
+                  -D_WINSOCK_DEPRECATED_NO_WARNINGS
+                  -D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 endif()
 
-set(PLUGIN_SOURCES
+add_definitions(-DASIO_STANDALONE)
+
+set(DEBUG_PLUGIN_SOURCES
   amxcallstack.cpp
   amxcallstack.h
   amxdebuginfo.cpp
@@ -53,35 +57,35 @@ set(PLUGIN_SOURCES
 configure_file(plugin.rc.in plugin.rc @ONLY)
 configure_file(pluginversion.h.in pluginversion.h @ONLY)
 
-list(APPEND PLUGIN_SOURCES
+list(APPEND DEBUG_PLUGIN_SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/plugin.rc
   ${CMAKE_CURRENT_BINARY_DIR}/pluginversion.h
 )
 
 if(WIN32 OR CYGWIN)
-  list(APPEND PLUGIN_SOURCES
+  list(APPEND DEBUG_PLUGIN_SOURCES
     fileutils-win32.cpp
     os-win32.cpp
     stacktrace-win32.cpp
   )
 else()
-  list(APPEND PLUGIN_SOURCES
+  list(APPEND DEBUG_PLUGIN_SOURCES
     fileutils-unix.cpp
     os-unix.cpp
     stacktrace-unix.cpp
   )
 endif()
 
-add_samp_plugin(plugin ${PLUGIN_SOURCES})
+add_samp_plugin(debug-plugin ${DEBUG_PLUGIN_SOURCES})
 
 add_subdirectory(amx)
-target_link_Libraries(plugin amx configreader pcre subhook)
+target_link_Libraries(debug-plugin amx configreader pcre subhook protobuf)
 
 if(WIN32)
-  target_link_libraries(plugin DbgHelp)
+  target_link_libraries(debug-plugin DbgHelp)
 endif()
 
-install(TARGETS plugin LIBRARY DESTINATION ".")
+install(TARGETS debug-plugin LIBRARY DESTINATION ".")
 
 if(MSVC_IDE AND MSVC_VERSION GREATER 1200)
   set(config \${CMAKE_INSTALL_CONFIG_NAME})

@@ -87,5 +87,5 @@ macro(tests target)
   add_custom_target(${target}-tests ALL DEPENDS ${_amx_files})
 endmacro()
 
-file(STRINGS test.list CRASHDETECT_TESTS)
-tests(crashdetect ${CRASHDETECT_TESTS})
+file(STRINGS test.list DEBUG_PLUGIN_TESTS)
+tests(debug-plugin ${DEBUG_PLUGIN_TESTS})

@@ -1,0 +1,8 @@
+[submodule "deps/asio"]
+	path = deps/asio
+	url = https://github.com/podsvirov/asio.git
+	branch = topic-cmake-project
+[submodule "deps/protobuf"]
+	path = deps/protobuf
+	url = https://github.com/google/protobuf.git
+	branch = 3.5.x

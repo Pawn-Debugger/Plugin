@@ -8,7 +8,11 @@ set(DEPS_COMMON_CMAKE_ARGS
   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
   -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+  -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
+  -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
   -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+  -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
+  -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
   -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX}
 )
 
@@ -67,12 +71,46 @@ endif()
 
 list(APPEND DEPS_DEFINITIONS PCRE_STATIC)
 
+externalproject_add(asio-external
+  PREFIX ${DEPS_PREFIX}
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/asio/asio
+  CMAKE_ARGS ${DEPS_COMMON_CMAKE_ARGS})
+
 set_property(DIRECTORY ${CMAKE_SOURCE_DIR} APPEND PROPERTY
   COMPILE_DEFINITIONS ${DEPS_DEFINITIONS})
 set_property(DIRECTORY ${CMAKE_SOURCE_DIR} APPEND PROPERTY
   INCLUDE_DIRECTORIES ${DEPS_INCLUDE_DIR})
 
-foreach(target configreader-external subhook-external pcre-external)
+externalproject_add(protobuf-external
+  PREFIX ${DEPS_PREFIX}
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/protobuf/cmake
+  CMAKE_ARGS -Dprotobuf_BUILD_TESTS=OFF
+             ${DEPS_COMMON_CMAKE_ARGS})
+
+add_library(protobuf STATIC IMPORTED GLOBAL)
+add_dependencies(protobuf protobuf-external)
+
+if(WIN32)
+  get_library_filename(libprotobuf PROTOBUF_FILENAME)
+else(WIN32)
+  get_library_filename(protobuf PROTOBUF_FILENAME)
+endif()
+
+set_target_properties(protobuf PROPERTIES
+  IMPORTED_LOCATION ${DEPS_LIBRARY_DIR}/${PROTOBUF_FILENAME})
+
+if(WIN32)
+  get_library_filename(libprotobufd PROTOBUF_FILENAME_DEBUG)
+  set_target_properties(protobuf PROPERTIES
+    IMPORTED_LOCATION_DEBUG ${DEPS_LIBRARY_DIR}/${PROTOBUF_FILENAME_DEBUG})
+endif()
+
+set_property(DIRECTORY ${CMAKE_SOURCE_DIR} APPEND PROPERTY
+  COMPILE_DEFINITIONS ${DEPS_DEFINITIONS})
+set_property(DIRECTORY ${CMAKE_SOURCE_DIR} APPEND PROPERTY
+  INCLUDE_DIRECTORIES ${DEPS_INCLUDE_DIR})
+
+foreach(target configreader-external subhook-external pcre-external protobuf-external)
   file(RELATIVE_PATH folder ${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
   set_property(TARGET ${target} PROPERTY FOLDER ${folder})
 endforeach()
