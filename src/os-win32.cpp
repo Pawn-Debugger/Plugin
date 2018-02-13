@@ -130,7 +130,7 @@ struct ThreadInfo {
   FILETIME user_time;
 };
 
-class IsInvalidThread: std::unary_function<ThreadInfo, bool> {
+class IsInvalidThread: std::function<bool(ThreadInfo)> {
  public:
   bool operator()(const ThreadInfo &thread) {
     return thread.creation_time.dwHighDateTime == 0 &&
@@ -138,7 +138,7 @@ class IsInvalidThread: std::unary_function<ThreadInfo, bool> {
   }
 };
 
-class CompareThreads: std::binary_function<ThreadInfo, ThreadInfo, bool> {
+class CompareThreads: std::function<bool(ThreadInfo, ThreadInfo)> {
  public:
   bool operator()(const ThreadInfo &lhs, const ThreadInfo &rhs) {
     return CompareFileTime(&lhs.creation_time, &rhs.creation_time) < 0;

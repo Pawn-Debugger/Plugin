@@ -146,7 +146,7 @@ int CrashDetect::Load() {
   const char *var = getenv("AMX_PATH");
   if (var != 0) {
     SplitString(var, fileutils::kNativePathListSepChar,
-        [&amx_finder](auto path) { amx_finder.AddSearchPath(path); });
+        std::bind(std::mem_fn(&AMXPathFinder::AddSearchPath), &amx_finder, std::placeholders::_1));
   }
 
   amx_path_ = amx_finder.Find(amx());
