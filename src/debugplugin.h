@@ -42,8 +42,8 @@ namespace os {
   class Context;
 }
 
-class CrashDetect : public AMXService<CrashDetect> {
- friend class AMXService<CrashDetect>;
+class DebugPlugin : public AMXService<DebugPlugin> {
+ friend class AMXService<DebugPlugin>;
 
  public:
   enum TraceFlags {
@@ -86,7 +86,7 @@ class CrashDetect : public AMXService<CrashDetect> {
   static void PrintLoadedModules();
 
  private:
-  CrashDetect(AMX *amx);
+  DebugPlugin(AMX *amx);
 
  private:
   AMXDebugInfo debug_info_;

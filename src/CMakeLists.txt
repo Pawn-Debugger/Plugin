@@ -34,8 +34,8 @@ set(DEBUG_PLUGIN_SOURCES
   amxstacktrace.h
   amxexecutor.h
   amxexecutor.cpp
-  crashdetect.cpp
-  crashdetect.h
+  debugplugin.cpp
+  debugplugin.h
   fileutils.cpp
   fileutils.h
   log.cpp

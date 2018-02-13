@@ -29,7 +29,7 @@
 
 #include "amxerror.h"
 #include "amxexecutor.h"
-#include "crashdetect.h"
+#include "debugplugin.h"
 #include "fileutils.h"
 #include "logprintf.h"
 #include "natives.h"
@@ -40,11 +40,11 @@
 static SubHook exec_hook;
 
 static int AMXAPI AmxDebug(AMX *amx) {
-  return CrashDetect::GetInstance(amx)->HandleAMXDebug();
+  return DebugPlugin::GetInstance(amx)->HandleAMXDebug();
 }
 
 static int AMXAPI AmxCallback(AMX *amx, cell index, cell *result, cell *params) {
-  return CrashDetect::GetInstance(amx)->HandleAMXCallback(index, result, params);
+  return DebugPlugin::GetInstance(amx)->HandleAMXCallback(index, result, params);
 }
 
 static int AMXAPI AmxExec(AMX *amx, cell *retval, int index) {
@@ -52,7 +52,7 @@ static int AMXAPI AmxExec(AMX *amx, cell *retval, int index) {
 }
 
 static void AMXAPI AmxExecError(AMX *amx, cell index, cell *retval, int error) {
-  CrashDetect::GetInstance(amx)->HandleAMXExecError(index, retval, error);
+  DebugPlugin::GetInstance(amx)->HandleAMXExecError(index, retval, error);
 }
 
 PLUGIN_EXPORT unsigned int PLUGIN_CALL Supports() {
@@ -71,20 +71,20 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData) {
   } else {
     std::string module = fileutils::GetFileName(os::GetModuleName(amx_Exec_sub));
     if (!module.empty()) {
-      logprintf("  CrashDetect must be loaded before '%s'", module.c_str());
+      logprintf("  DebugPlugin must be loaded before '%s'", module.c_str());
     }
     return false;
   }
 
-  os::SetCrashHandler(CrashDetect::OnCrash);
-  os::SetInterruptHandler(CrashDetect::OnInterrupt);
+  os::SetCrashHandler(DebugPlugin::OnCrash);
+  os::SetInterruptHandler(DebugPlugin::OnInterrupt);
 
-  logprintf("  CrashDetect plugin " PROJECT_VERSION_STRING);
+  logprintf("  DebugPlugin plugin " PROJECT_VERSION_STRING);
   return true;
 }
 
 PLUGIN_EXPORT int PLUGIN_CALL AmxLoad(AMX *amx) {
-  CrashDetect::CreateInstance(amx)->Load();
+  DebugPlugin::CreateInstance(amx)->Load();
 
   amx_SetDebugHook(amx, AmxDebug);
   amx_SetCallback(amx, AmxCallback);
@@ -95,7 +95,7 @@ PLUGIN_EXPORT int PLUGIN_CALL AmxLoad(AMX *amx) {
 }
 
 PLUGIN_EXPORT int PLUGIN_CALL AmxUnload(AMX *amx) {
-  CrashDetect::GetInstance(amx)->Unload();
-  CrashDetect::DestroyInstance(amx);
+  DebugPlugin::GetInstance(amx)->Unload();
+  DebugPlugin::DestroyInstance(amx);
   return AMX_ERR_NONE;
 }
