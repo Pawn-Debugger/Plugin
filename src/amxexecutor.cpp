@@ -1,5 +1,4 @@
-#include <assert.h>
-
+#include <cassert>
 #include <chrono>
 #include <thread>
 
@@ -7,44 +6,8 @@
 #include "amxopcode.h"
 #include "log.h"
 
-namespace {
-#if !defined NDEBUG
-  static int check_endian(void)
-  {
-    uint16_t val=0x00ff;
-    unsigned char *ptr=(unsigned char *)&val;
-    /* "ptr" points to the starting address of "val". If that address
-     * holds the byte "0xff", the computer stored the low byte of "val"
-     * at the lower address, and so the memory lay out is Little Endian.
-     */
-    assert(*ptr==0xff || *ptr==0x00);
-    #if BYTE_ORDER==BIG_ENDIAN
-      return *ptr==0x00;  /* return "true" if big endian */
-    #else
-      return *ptr==0xff;  /* return "true" if little endian */
-    #endif
-  }
-#endif
-
-#if !defined assert_static
-  /* see "Compile-Time Assertions" by Ralf Holly,
-   * C/C++ Users Journal, November 2004
-   */
-  #define assert_static(e) \
-    do { \
-      enum { assert_static__ = 1/(e) }; \
-    } while (0)
-#endif
-}
-
 AMXExecutor::AMXExecutor(AMX *amx) : AMXService<AMXExecutor>(amx)
 {}
-
-#if -8/3==-2 && 8/-3==-2
-  #define TRUNC_SDIV    /* signed divisions are truncated on this platform */
-#else
-  #define IABS(a)       ((a)>=0 ? (a) : (-a))
-#endif
 
 #if !defined _R
   #define _R_DEFAULT            /* mark default memory access */
@@ -86,15 +49,9 @@ AMXExecutor::AMXExecutor(AMX *amx) : AMXService<AMXExecutor>(amx)
 
 #define STKMARGIN       ((cell)(16*sizeof(cell)))
 
-#if PAWN_CELL_SIZE==16 || defined AMX_DONT_RELOCATE
-  #define JUMPABS(base,ip)      ((cell *)((base) + *(ip)))
-  #define RELOC_ABS(base, off)
-  #define RELOC_VALUE(base, v)
-#else
-  #define JUMPABS(base, ip)     ((cell *)*(ip))
-  #define RELOC_ABS(base, off)  (*(ucell *)((base)+(int)(off)) += (ucell)(base))
-  #define RELOC_VALUE(base, v)  ((v)+((ucell)(base)))
-#endif
+#define JUMPABS(base, ip)     ((cell *)*(ip))
+#define RELOC_ABS(base, off)  (*(ucell *)((base)+(int)(off)) += (ucell)(base))
+#define RELOC_VALUE(base, v)  ((v)+((ucell)(base)))
 
 int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   AMX *_amx = amx();
@@ -105,13 +62,10 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   cell reset_stk, reset_hea, *cip;
   ucell codesize;
   int i;
-  #if defined ASM32 || defined JIT
-    cell  parms[9];     /* registers and parameters for assembler _amx */
-  #else
-    AMXOpcode op;
-    cell offs,val;
-    int num;
-  #endif
+
+  AMXOpcode op;
+  cell offs,val;
+  int num;
 
   assert(_amx!=NULL);
 
@@ -163,38 +117,25 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   /* check values just copied */
   CHKSTACK();
   CHKHEAP();
-  assert(check_endian());
 
   /* sanity checks */
-  assert_static(AMX_OP_PUSH_PRI==36);
-  assert_static(AMX_OP_PROC==46);
-  assert_static(AMX_OP_SHL==65);
-  assert_static(AMX_OP_SMUL==72);
-  assert_static(AMX_OP_EQ==95);
-  assert_static(AMX_OP_INC_PRI==107);
-  assert_static(AMX_OP_MOVS==117);
-  assert_static(AMX_OP_SYMBOL==126);
-  assert_static(AMX_OP_PUSH2_C==138);
-  assert_static(AMX_OP_LOAD_BOTH==154);
-  #if PAWN_CELL_SIZE==16
-    assert_static(sizeof(cell)==2);
-  #elif PAWN_CELL_SIZE==32
-    assert_static(sizeof(cell)==4);
-  #elif PAWN_CELL_SIZE==64
-    assert_static(sizeof(cell)==8);
-  #else
-    #error Unsupported cell size
-  #endif
+  static_assert(AMX_OP_PUSH_PRI==36);
+  static_assert(AMX_OP_PROC==46);
+  static_assert(AMX_OP_SHL==65);
+  static_assert(AMX_OP_SMUL==72);
+  static_assert(AMX_OP_EQ==95);
+  static_assert(AMX_OP_INC_PRI==107);
+  static_assert(AMX_OP_MOVS==117);
+  static_assert(AMX_OP_SYMBOL==126);
+  static_assert(AMX_OP_PUSH2_C==138);
+  static_assert(AMX_OP_LOAD_BOTH==154);
+  static_assert(sizeof(cell)==4);
 
   if (index!=AMX_EXEC_CONT) {
     reset_stk+=_amx->paramcount*sizeof(cell);
     PUSH(_amx->paramcount*sizeof(cell));
     _amx->paramcount=0;          /* push the parameter count to the stack & reset */
-    #if defined ASM32 || defined JIT
-      PUSH(RELOC_VALUE(code,0));/* relocated zero return address */
-    #else
-      PUSH(0);                  /* zero return address */
-    #endif
+    PUSH(0);                  /* zero return address */
   } /* if */
   /* check stack/heap before starting to run */
   CHKMARGIN();
@@ -364,17 +305,13 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_ALIGN_PRI:
       GETPARAM(offs);
-      #if BYTE_ORDER==LITTLE_ENDIAN
-        if ((size_t)offs<sizeof(cell))
-          pri ^= sizeof(cell)-offs;
-      #endif
+      if ((size_t)offs<sizeof(cell))
+        pri ^= sizeof(cell)-offs;
       break;
     case AMX_OP_ALIGN_ALT:
       GETPARAM(offs);
-      #if BYTE_ORDER==LITTLE_ENDIAN
-        if ((size_t)offs<sizeof(cell))
-          alt ^= sizeof(cell)-offs;
-      #endif
+      if ((size_t)offs<sizeof(cell))
+        alt ^= sizeof(cell)-offs;
       break;
     case AMX_OP_LCTRL:
       GETPARAM(offs);
@@ -623,16 +560,8 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         ABORT(_amx,AMX_ERR_DIVIDE);
       /* use floored division and matching remainder */
       offs=alt;
-      #if defined TRUNC_SDIV
-        pri=pri/offs;
-        alt=pri%offs;
-      #else
-        val=pri;                /* portable routine for truncated division */
-        pri=IABS(pri)/IABS(offs);
-        if ((cell)(val ^ offs)<0)
-          pri=-pri;
-        alt=val-pri*offs;       /* calculate the matching remainder */
-      #endif
+      pri=pri/offs;
+      alt=pri%offs;
       /* now "fiddle" with the values to get floored division */
       if (alt!=0 && (cell)(alt ^ offs)<0) {
         pri--;
@@ -644,16 +573,8 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         ABORT(_amx,AMX_ERR_DIVIDE);
       /* use floored division and matching remainder */
       offs=pri;
-      #if defined TRUNC_SDIV
-        pri=alt/offs;
-        alt=alt%offs;
-      #else
-        val=alt;                /* portable routine for truncated division */
-        pri=IABS(alt)/IABS(offs);
-        if ((cell)(val ^ offs)<0)
-          pri=-pri;
-        alt=val-pri*offs;       /* calculate the matching remainder */
-      #endif
+      pri=alt/offs;
+      alt=alt%offs;
       /* now "fiddle" with the values to get floored division */
       if (alt!=0 && (cell)(alt ^ offs)<0) {
         pri--;
@@ -1000,30 +921,6 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       break;
     case AMX_OP_NOP:
       break;
-#if !defined AMX_NO_MACRO_INSTR
-    case AMX_OP_SYSREQ_N:
-      GETPARAM(offs);
-      GETPARAM(val);
-      PUSH(val);
-      /* save a few registers */
-      _amx->cip=(cell)((unsigned char *)cip-code);
-      _amx->hea=hea;
-      _amx->frm=frm;
-      _amx->stk=stk;
-      num=_amx->callback(_amx,offs,&pri,(cell *)(data+(int)stk));
-      stk+=val+4;
-      if (num!=AMX_ERR_NONE) {
-        if (num==AMX_ERR_SLEEP) {
-          _amx->pri=pri;
-          _amx->alt=alt;
-          _amx->reset_stk=reset_stk;
-          _amx->reset_hea=reset_hea;
-          return num;
-        } /* if */
-        ABORT(_amx,num);
-      } /* if */
-      break;
-#endif
     case AMX_OP_BREAK:
       assert((_amx->flags & AMX_FLAG_BROWSE)==0);
       if (_amx->debug!=NULL) {
@@ -1045,147 +942,6 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
         } /* if */
       } /* if */
       break;
-#if !defined AMX_NO_MACRO_INSTR
-    case AMX_OP_PUSH5:
-      GETPARAM(offs);
-      PUSH(_R(data,offs));
-      /* drop through */
-    case AMX_OP_PUSH4:
-      GETPARAM(offs);
-      PUSH(_R(data,offs));
-      /* drop through */
-    case AMX_OP_PUSH3:
-      GETPARAM(offs);
-      PUSH(_R(data,offs));
-      /* drop through */
-    case AMX_OP_PUSH2:
-      GETPARAM(offs);
-      PUSH(_R(data,offs));
-      GETPARAM(offs);
-      PUSH(_R(data,offs));
-      break;
-    case AMX_OP_PUSH5_S:
-      GETPARAM(offs);
-      PUSH(_R(data,frm+offs));
-      /* drop through */
-    case AMX_OP_PUSH4_S:
-      GETPARAM(offs);
-      PUSH(_R(data,frm+offs));
-      /* drop through */
-    case AMX_OP_PUSH3_S:
-      GETPARAM(offs);
-      PUSH(_R(data,frm+offs));
-      /* drop through */
-    case AMX_OP_PUSH2_S:
-      GETPARAM(offs);
-      PUSH(_R(data,frm+offs));
-      GETPARAM(offs);
-      PUSH(_R(data,frm+offs));
-      break;
-    case AMX_OP_PUSH5_C:
-      GETPARAM(offs);
-      PUSH(offs);
-      /* drop through */
-    case AMX_OP_PUSH4_C:
-      GETPARAM(offs);
-      PUSH(offs);
-      /* drop through */
-    case AMX_OP_PUSH3_C:
-      GETPARAM(offs);
-      PUSH(offs);
-      /* drop through */
-    case AMX_OP_PUSH2_C:
-      GETPARAM(offs);
-      PUSH(offs);
-      GETPARAM(offs);
-      PUSH(offs);
-      break;
-    case AMX_OP_PUSH5_ADR:
-      GETPARAM(offs);
-      PUSH(frm+offs);
-      /* drop through */
-    case AMX_OP_PUSH4_ADR:
-      GETPARAM(offs);
-      PUSH(frm+offs);
-      /* drop through */
-    case AMX_OP_PUSH3_ADR:
-      GETPARAM(offs);
-      PUSH(frm+offs);
-      /* drop through */
-    case AMX_OP_PUSH2_ADR:
-      GETPARAM(offs);
-      PUSH(frm+offs);
-      GETPARAM(offs);
-      PUSH(frm+offs);
-      break;
-    case AMX_OP_LOAD_BOTH:
-      GETPARAM(offs);
-      pri=_R(data,offs);
-      GETPARAM(offs);
-      alt=_R(data,offs);
-      break;
-    case AMX_OP_LOAD_S_BOTH:
-      GETPARAM(offs);
-      pri=_R(data,frm+offs);
-      GETPARAM(offs);
-      alt=_R(data,frm+offs);
-      break;
-    case AMX_OP_CONST:
-      GETPARAM(offs);
-      GETPARAM(val);
-      _W32(data,offs,val);
-      break;
-    case AMX_OP_CONST_S:
-      GETPARAM(offs);
-      GETPARAM(val);
-      _W32(data,frm+offs,val);
-      break;
-#endif
-#if !defined AMX_DONT_RELOCATE
-    case AMX_OP_SYSREQ_D: /* see AMX_OP_SYSREQ_C */
-      GETPARAM(offs);
-      /* save a few registers */
-      _amx->cip=(cell)((unsigned char *)cip-code);
-      _amx->hea=hea;
-      _amx->frm=frm;
-      _amx->stk=stk;
-      pri=((AMX_NATIVE)offs)(_amx,(cell *)(data+(int)stk));
-      if (_amx->error!=AMX_ERR_NONE) {
-        if (_amx->error==AMX_ERR_SLEEP) {
-          _amx->pri=pri;
-          _amx->alt=alt;
-          _amx->reset_stk=reset_stk;
-          _amx->reset_hea=reset_hea;
-          return AMX_ERR_SLEEP;
-        } /* if */
-        ABORT(_amx,_amx->error);
-      } /* if */
-      break;
-#endif
-#if !defined AMX_NO_MACRO_INSTR && !defined AMX_DONT_RELOCATE
-    case AMX_OP_SYSREQ_ND:    /* see SYSREQ_N */
-      GETPARAM(offs);
-      GETPARAM(val);
-      PUSH(val);
-      /* save a few registers */
-      _amx->cip=(cell)((unsigned char *)cip-code);
-      _amx->hea=hea;
-      _amx->frm=frm;
-      _amx->stk=stk;
-      pri=((AMX_NATIVE)offs)(_amx,(cell *)(data+(int)stk));
-      stk+=val+4;
-      if (_amx->error!=AMX_ERR_NONE) {
-        if (_amx->error==AMX_ERR_SLEEP) {
-          _amx->pri=pri;
-          _amx->alt=alt;
-          _amx->reset_stk=reset_stk;
-          _amx->reset_hea=reset_hea;
-          return AMX_ERR_SLEEP;
-        } /* if */
-        ABORT(_amx,_amx->error);
-      } /* if */
-      break;
-#endif
     default:
       /* case AMX_OP_FILE:          should not occur during execution
        * case AMX_OP_CASETBL:       should not occur during execution
