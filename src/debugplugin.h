@@ -33,6 +33,7 @@
 #include "amxdebuginfo.h"
 #include "amxscript.h"
 #include "amxservice.h"
+#include "network.h"
 #include "regexp.h"
 
 class AMXError;
@@ -90,6 +91,7 @@ class DebugPlugin : public AMXService<DebugPlugin> {
 
  private:
   AMXDebugInfo debug_info_;
+  Network network_;
   AMX_DEBUG prev_debug_;
   AMX_CALLBACK prev_callback_;
   cell last_frame_;

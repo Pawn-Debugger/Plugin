@@ -44,6 +44,10 @@ set(DEBUG_PLUGIN_SOURCES
   logprintf.h
   natives.cpp
   natives.h
+  network.cpp
+  network.h
+  networkconnection.cpp
+  networkconnection.h
   os.h
   plugin.cpp
   plugin.def

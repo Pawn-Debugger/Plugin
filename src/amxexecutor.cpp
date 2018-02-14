@@ -141,6 +141,9 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   CHKMARGIN();
 
   for ( ;; ) {
+    while (stopped_) {}
+    stopped_ = true;
+
     LogDebugPrint("Current CIP: %d | Current OP: %s | Param or next OP: %d",
       (uint32_t) cip,
       std::string(AMXOpcodeNames[*cip]).c_str(),

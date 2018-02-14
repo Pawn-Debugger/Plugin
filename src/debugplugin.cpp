@@ -27,6 +27,7 @@
 #include <cstring>
 #include <functional>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -131,6 +132,7 @@ AMXCallStack DebugPlugin::call_stack_;
 
 DebugPlugin::DebugPlugin(AMX *amx)
  : AMXService<DebugPlugin>(amx),
+   network_(AMXExecutor::GetInstance(amx)),
    prev_debug_(0),
    prev_callback_(0),
    last_frame_(amx->stp),
@@ -139,6 +141,8 @@ DebugPlugin::DebugPlugin(AMX *amx)
 }
 
 int DebugPlugin::Load() {
+  network_.start();
+
   AMXPathFinder amx_finder;
   amx_finder.AddSearchPath("gamemodes");
   amx_finder.AddSearchPath("filterscripts");
@@ -170,6 +174,8 @@ int DebugPlugin::Load() {
 }
 
 int DebugPlugin::Unload() {
+  network_.stop();
+
   return AMX_ERR_NONE;
 }
 
