@@ -54,6 +54,7 @@ set(DEBUG_PLUGIN_SOURCES
   plugincommon.h
   regexp.cpp
   regexp.h
+  safequeue.h
   stacktrace.cpp
   stacktrace.h
 )
@@ -83,7 +84,8 @@ endif()
 add_samp_plugin(debug-plugin ${DEBUG_PLUGIN_SOURCES})
 
 add_subdirectory(amx)
-target_link_Libraries(debug-plugin amx configreader pcre subhook protobuf)
+add_subdirectory(proto)
+target_link_Libraries(debug-plugin messages amx configreader pcre subhook)
 
 if(WIN32)
   target_link_libraries(debug-plugin DbgHelp)
@@ -101,4 +103,7 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+
+  # Already fixed on probuf repo, should not be needed after update to >3.5.1 
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4146")
 endif(MSVC)

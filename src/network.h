@@ -7,21 +7,34 @@
 
 #include "amxexecutor.h"
 #include "networkconnection.h"
+#include "safequeue.h"
+#include "proto/task.pb.h"
+#include "proto/response.pb.h"
 
 class Network {
  public:
-  Network(AMXExecutor* executor);
+  Network();
 
-  void start();
-  void stop();
+  void Start();
+  void Stop();
+  Task GetTask();
+  void AddTask(Task);
+  bool HasTask();
+  void EndConnection(NetworkConnection::pointer);
+
+  void SendSuccess();
+  void SendRegisters(AMXScript amx);
+  void SendConfusion();
  private:
-  void start_accept();
-  void handle_accept(NetworkConnection::pointer, const std::error_code&);
+  void StartAccept();
+  void HandleAccept(NetworkConnection::pointer, const std::error_code&);
+  void SendResponseToAll(Response &);
 
+  SafeQueue<Task> pending_tasks_;
   std::thread network_thread_;
   asio::io_service server_io_;
   asio::ip::tcp::acceptor acceptor_;
-  AMXExecutor* executor_;
+  std::vector<NetworkConnection::pointer> connections_; 
 };
 
 #endif

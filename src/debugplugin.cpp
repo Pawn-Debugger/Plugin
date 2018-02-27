@@ -27,7 +27,6 @@
 #include <cstring>
 #include <functional>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -47,6 +46,7 @@
 #include "log.h"
 #include "os.h"
 #include "stacktrace.h"
+#include "proto/task.pb.h"
 
 #define AMX_EXEC_GDK    (-10)
 #define AMX_EXEC_GDK_42 (-10000)
@@ -132,7 +132,6 @@ AMXCallStack DebugPlugin::call_stack_;
 
 DebugPlugin::DebugPlugin(AMX *amx)
  : AMXService<DebugPlugin>(amx),
-   network_(AMXExecutor::GetInstance(amx)),
    prev_debug_(0),
    prev_callback_(0),
    last_frame_(amx->stp),
@@ -141,7 +140,7 @@ DebugPlugin::DebugPlugin(AMX *amx)
 }
 
 int DebugPlugin::Load() {
-  network_.start();
+  network_.Start();
 
   AMXPathFinder amx_finder;
   amx_finder.AddSearchPath("gamemodes");
@@ -174,22 +173,28 @@ int DebugPlugin::Load() {
 }
 
 int DebugPlugin::Unload() {
-  network_.stop();
+  network_.Stop();
 
   return AMX_ERR_NONE;
 }
 
 int DebugPlugin::HandleAMXDebug() {
-  if (amx().GetFrm() < last_frame_ && (trace_flags_ & TRACE_FUNCTIONS)
-      && debug_info_.IsLoaded()) {
-    AMXStackTrace trace =
-      GetAMXStackTrace(amx(), amx().GetFrm(), amx().GetCip(), 1);
-    if (trace.current_frame().return_address() != 0) {
-      PrintTraceFrame(trace.current_frame(), debug_info_);
-    }
+  Task task = network_.GetTask();
+
+  switch (task.type()) {
+    case Task::RUN:
+      network_.SendSuccess();
+      break;
+    case Task::QUERY_REGISTERS:
+      network_.SendRegisters(amx());
+      break;
+    case Task::UNKNOWN:
+    default:
+      network_.SendConfusion();
+      break;
   }
-  last_frame_ = amx().GetFrm();
-  return prev_debug_ != 0 ? prev_debug_(amx()) : AMX_ERR_NONE;
+
+  return AMX_ERR_NONE;
 }
 
 int DebugPlugin::HandleAMXCallback(cell index, cell *result, cell *params) {

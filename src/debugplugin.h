@@ -22,8 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CRASHDETECT_H
-#define CRASHDETECT_H
+#ifndef DEBUG_PLUGIN_H
+#define DEBUG_PLUGIN_H
 
 #include <cstdarg>
 #include <cstdio>
@@ -105,4 +105,4 @@ class DebugPlugin : public AMXService<DebugPlugin> {
   static AMXCallStack call_stack_;
 };
 
-#endif // !CRASHDETECT_H
+#endif // !DEBUG_PLUGIN_H

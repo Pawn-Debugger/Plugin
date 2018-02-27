@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+message Task {
+  enum Type {
+    UNKNOWN = 0;
+    RUN = 1;
+    STOP = 2;
+    STEP_SINGLE = 3;
+    STEP_LINE = 4;
+    BREAKPOINT_ADD = 5;
+    BREAKPOINT_REMOVE = 6;
+    QUERY_REGISTERS = 7;
+  }
+  Type type = 1;
+
+  message Breakpoint {
+    int32 instruction_pointer = 0;
+  }
+
+  Breakpoint breakpoint = 2;
+}

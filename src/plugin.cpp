@@ -22,6 +22,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -75,6 +76,10 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData) {
     }
     return false;
   }
+
+  // void *amx_Callback_ptr = exports[PLUGIN_AMX_EXPORT_Callback];
+  // void *amx_Callback_sub = SubHook::ReadDst(amx_Callback_ptr);
+  // exec_hook.Install(amx_Callback, (void*) AmxCallback)
 
   os::SetCrashHandler(DebugPlugin::OnCrash);
   os::SetInterruptHandler(DebugPlugin::OnInterrupt);

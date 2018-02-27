@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+message Response {
+  enum Type {
+    UNKNOWN = 0;
+    SUCCESS = 1;
+    REGISTERS = 2;
+  }
+  Type type = 1;
+
+  message Registers {
+    int32 PRI = 1;
+    int32 ALT = 2;
+    int32 COD = 3;
+    int32 DAT = 4;
+    int32 HLW = 5;
+    int32 HEA = 6;
+    int32 STP = 7;
+    int32 STK = 8;
+    int32 FRM = 9;
+    int32 CIP = 10;
+  }
+
+  Registers registers = 2;
+}

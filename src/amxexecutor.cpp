@@ -1,6 +1,7 @@
 #include <cassert>
-#include <chrono>
+#include <chrono> 
 #include <thread>
+#include <iostream>
 
 #include "amxexecutor.h"
 #include "amxopcode.h"
@@ -141,11 +142,8 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
   CHKMARGIN();
 
   for ( ;; ) {
-    while (stopped_) {}
-    stopped_ = true;
-
     LogDebugPrint("Current CIP: %d | Current OP: %s | Param or next OP: %d",
-      (uint32_t) cip,
+      (uint32_t) ((unsigned char *) cip - code),
       std::string(AMXOpcodeNames[*cip]).c_str(),
       *(cip + 1)
     );
@@ -925,25 +923,7 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
     case AMX_OP_NOP:
       break;
     case AMX_OP_BREAK:
-      assert((_amx->flags & AMX_FLAG_BROWSE)==0);
-      if (_amx->debug!=NULL) {
-        /* store status */
-        _amx->frm=frm;
-        _amx->stk=stk;
-        _amx->hea=hea;
-        _amx->cip=(cell)((unsigned char*)cip-code);
-        num=_amx->debug(_amx);
-        if (num!=AMX_ERR_NONE) {
-          if (num==AMX_ERR_SLEEP) {
-            _amx->pri=pri;
-            _amx->alt=alt;
-            _amx->reset_stk=reset_stk;
-            _amx->reset_hea=reset_hea;
-            return num;
-          } /* if */
-          ABORT(_amx,num);
-        } /* if */
-      } /* if */
+      // Already handled for all instructions
       break;
     default:
       /* case AMX_OP_FILE:          should not occur during execution
@@ -952,5 +932,25 @@ int AMXExecutor::HandleAMXExec(cell *retval, int index) {
       assert(0);
       ABORT(_amx,AMX_ERR_INVINSTR);
     } /* switch */
+
+    assert((_amx->flags & AMX_FLAG_BROWSE)==0);
+    if (_amx->debug!=NULL) {
+      /* store status */
+      _amx->pri=pri;
+      _amx->alt=alt;
+      _amx->frm=frm;
+      _amx->stk=stk;
+      _amx->hea=hea;
+      _amx->cip=(cell)((unsigned char*)cip-code);
+      num=_amx->debug(_amx);
+      if (num!=AMX_ERR_NONE) {
+        if (num==AMX_ERR_SLEEP) {
+          _amx->reset_stk=reset_stk;
+          _amx->reset_hea=reset_hea;
+          return num;
+        } /* if */
+        ABORT(_amx,num);
+      } /* if */
+    } /* if */
   } /* for */
 }
